@@ -65,12 +65,8 @@ func (handler UserHandler) Create(c *gin.Context) {
 			if user.Clientid == "" {
 				year := strconv.Itoa(now.Year())
 				clientid = year + "0000001"
-			    //DECRYPTION
+			    //TODO DECRYPTION
 			    // result, err := decrypt(key, ciphertext)
-			    // if err != nil {
-			    //     log.Fatal(err)
-			    // }
-			    // fmt.Printf("%s\n", result)
 			} else {
 				year,_ := strconv.Atoi(fmt.Sprintf("%s",user.Clientid))
 				clientid = strconv.Itoa(year + 1)
@@ -86,6 +82,43 @@ func (handler UserHandler) Create(c *gin.Context) {
 				c.JSON(http.StatusCreated, generateJWT(clientid))
 			} else {
 				respond(http.StatusBadRequest,"Unable to create new user, Please try again",c,true)
+			}
+		}
+	}
+}
+
+//user authentication
+func (handler UserHandler) Auth(c *gin.Context) {
+	username := c.PostForm("username")
+	password := c.PostForm("password")
+
+	if (strings.TrimSpace(username) == "") {
+		respond(http.StatusBadRequest,"Please supply the user's username",c,true)
+	} else if (strings.TrimSpace(password) == "") {
+		respond(http.StatusBadRequest,"Please supply the user's password",c,true)
+	} else {
+		//check if username already existing
+		user := m.User{}	
+		handler.db.Table("tbl_user").Where("username = ?",username).Find(&user)
+
+		if user.Clientid == "" {
+			respond(http.StatusBadRequest,"Account not found!",c,true)
+		} else {
+	    	toEncrypt := []byte(password)
+	    	ciphertext,_ := encrypt([]byte(config.GetString("CRYPT_KEY")), toEncrypt)
+			result, _ := decrypt([]byte(config.GetString("CRYPT_KEY")), ciphertext)
+			//invalid password
+			if fmt.Sprintf("%s",result) != password {
+				respond(http.StatusBadRequest,"Account not found!",c,true)
+			} else {
+				//authentication successful
+				authenticatedUser := m.AuthenticatedUser{}
+				authenticatedUser.Id = user.Id
+				authenticatedUser.Clientid = user.Clientid
+				authenticatedUser.Username = user.Username
+				authenticatedUser.Companyid = user.Companyid
+				authenticatedUser.Token = generateJWT(user.Clientid).Token
+				c.JSON(http.StatusOK, authenticatedUser)
 			}
 		}
 	}
@@ -134,7 +167,7 @@ func (handler UserHandler) Update(c *gin.Context) {
 	}
 }
 
-func generateJWT(clientid string) m.AuthenticatedUser {
+func generateJWT(clientid string) m.JWT {
 	// Create the token
 	token := jwt_lib.New(jwt_lib.GetSigningMethod("HS256"))
 	// Set some claims
@@ -142,7 +175,7 @@ func generateJWT(clientid string) m.AuthenticatedUser {
 	token.Claims["exp"] = time.Now().Add(time.Hour * 1).Unix()
 	// Sign and get the complete encoded token as a string
 	tokenString, _ := token.SignedString([]byte(config.GetString("TOKEN_KEY")))
-	user := m.AuthenticatedUser{}
+	user := m.JWT{}
 	user.Token = tokenString
     return user
 }

@@ -1,5 +1,5 @@
 package models
 
-type AuthenticatedUser struct {
+type JWT struct {
 	Token string `json:"token"`
 }
