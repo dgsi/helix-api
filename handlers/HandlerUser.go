@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"fmt"
 	"time"
-	"log"
 	"io"
 	"errors"
 	"strconv"
@@ -12,6 +11,7 @@ import (
     "crypto/cipher"
     "crypto/rand"
     "encoding/base64"
+    "strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jinzhu/gorm"
@@ -42,11 +42,11 @@ func (handler UserHandler) Create(c *gin.Context) {
 	password := c.PostForm("password")
 	companyid := c.PostForm("company_id")
 
-	if (username == "") {
+	if (strings.TrimSpace(username) == "") {
 		respond(http.StatusBadRequest,"Please supply the user's username",c,true)
-	} else if (password == "") {
+	} else if (strings.TrimSpace(password) == "") {
 		respond(http.StatusBadRequest,"Please supply the user's password",c,true)
-	} else if (companyid == "") {
+	} else if (strings.TrimSpace(companyid) == "") {
 		respond(http.StatusBadRequest,"Please supply the user's company id",c,true)
 	} else {
 		//check if username already existing
@@ -86,6 +86,49 @@ func (handler UserHandler) Create(c *gin.Context) {
 				c.JSON(http.StatusCreated, generateJWT(clientid))
 			} else {
 				respond(http.StatusBadRequest,"Unable to create new user, Please try again",c,true)
+			}
+		}
+	}
+}
+
+//update user
+func (handler UserHandler) Update(c *gin.Context) {
+	client_id := c.Param("client_id")
+	username := c.PostForm("username")
+	companyid := c.PostForm("company_id")
+
+	if (strings.TrimSpace(username) == "") {
+		respond(http.StatusBadRequest,"Please supply the user's username",c,true)
+	} else if (strings.TrimSpace(companyid) == "") {
+		respond(http.StatusBadRequest,"Please supply the user's company id",c,true)
+	} else {
+		//check if user is existing based on the passed client id
+		currentUser := m.User{}	
+		handler.db.Table("tbl_user").Where("clientid = ?",client_id).Find(&currentUser)
+
+		if (currentUser.Clientid == "") {
+			respond(http.StatusBadRequest,"User record not found",c,true)
+		} else {
+			//check if username already existing
+			otherUser := m.User{}	
+			handler.db.Table("tbl_user").Where("clientid != ? AND username = ?",client_id, username).Find(&otherUser)
+
+			if (otherUser.Clientid != "") {
+				respond(http.StatusBadRequest,"Username already taken",c,true)
+			} else {
+				if currentUser.Username == username && currentUser.Companyid == companyid {
+					respond(http.StatusBadRequest,"No changes detected",c,true)
+				} else {
+					now := time.Now().UTC()
+					result := handler.db.Exec("UPDATE tbl_user SET username = ?, companyid = ?, date_updated = ? WHERE clientid = ?",username,companyid,now,client_id)
+					if (result.RowsAffected == 1) {
+						updatedUser := m.User{}
+						handler.db.Table("tbl_user").Where("clientid = ?",client_id).Find(&updatedUser)
+						c.JSON(http.StatusOK, updatedUser)
+					} else {
+						respond(http.StatusBadRequest,"Failed to update user record",c,true)
+					}
+				}
 			}
 		}
 	}
