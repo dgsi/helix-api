@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"log"
 
-	 "github.com/gin-gonic/gin"
-	 _ "github.com/go-sql-driver/mysql"
-	 h "helix/dgsi/api/handlers"
-	 "helix/dgsi/api/config"
+	"github.com/gin-gonic/gin"
+	_ "github.com/go-sql-driver/mysql"
+	h "helix/dgsi/api/handlers"
+	"helix/dgsi/api/config"
 	"github.com/jinzhu/gorm"
 	"github.com/gin-gonic/contrib/jwt"
 )
@@ -19,17 +19,15 @@ func main() {
 	LoadAPIRoutes(router, &db)
 }
 
-var (
-	mysupersecretpassword = "unicornsAreAwesome"
-)
-
 func LoadAPIRoutes(r *gin.Engine, db *gorm.DB) {
 	private := r.Group("/api/v1")
-	private.Use(jwt.Auth(mysupersecretpassword))
+	public := r.Group("/api/v1")
+	private.Use(jwt.Auth(config.GetString("TOKEN_KEY")))
 
 	//manage users
 	userHandler := h.NewUserHandler(db)
 	private.GET("/users", userHandler.Index)
+	public.POST("/users", userHandler.Create)
 
 	var port = os.Getenv("PORT")
 	if port == "" {
