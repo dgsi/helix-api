@@ -15,6 +15,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jinzhu/gorm"
+	"github.com/go-redis/redis"
 	jwt_lib "github.com/dgrijalva/jwt-go"
 	m "helix/dgsi/api/models"
 	"helix/dgsi/api/config"
