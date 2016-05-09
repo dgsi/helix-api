@@ -15,10 +15,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jinzhu/gorm"
-	"github.com/go-redis/redis"
 	jwt_lib "github.com/dgrijalva/jwt-go"
 	m "helix/dgsi/api/models"
 	"helix/dgsi/api/config"
+	"github.com/garyburd/redigo/redis"
 )
 
 type UserHandler struct {
@@ -31,8 +31,10 @@ func NewUserHandler(db *gorm.DB) *UserHandler {
 
 //get all users
 func (handler UserHandler) Index(c *gin.Context) {
+	ValidateToken(c)
 	users := []m.User{}	
 	handler.db.Table("tbl_user").Order("id desc").Find(&users)
+	fmt.Println("HEADER ---> " + c.Request.Header.Get("Authorization"))
 	c.JSON(http.StatusOK, &users)
 }
 
@@ -173,11 +175,13 @@ func generateJWT(clientid string) m.JWT {
 	token := jwt_lib.New(jwt_lib.GetSigningMethod("HS256"))
 	// Set some claims
 	token.Claims["ID"] = "clientid"
-	token.Claims["exp"] = time.Now().Add(time.Hour * 1).Unix()
+	token.Claims["exp"] = time.Now().Add(time.Hour * 24).Unix()
 	// Sign and get the complete encoded token as a string
 	tokenString, _ := token.SignedString([]byte(config.GetString("TOKEN_KEY")))
 	user := m.JWT{}
 	user.Token = tokenString
+	//add token to redis
+	AddTokenToRedis(tokenString)
     return user
 }
 
@@ -215,4 +219,24 @@ func decrypt(key, text []byte) ([]byte, error) {
     }
     return data, nil
 }
+
+func AddTokenToRedis(token string) {
+    c, err := redis.Dial("tcp", ":6379")
+	if err != nil {
+		fmt.Println("CONNECTED")
+	} else {
+		fmt.Println("NO CONNECTION")
+	}
+
+	c.Do("SET","hello",token)
+	
+	result, err := redis.String(c.Do("GET", "hello"))
+	fmt.Printf("2 ------------> ",result)
+	defer c.Close()
+}
+
+func ValidateToken(c *gin.Context) {
+    
+}
+
 
