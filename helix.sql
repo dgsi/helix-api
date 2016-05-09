@@ -122,8 +122,10 @@ CREATE TABLE `tbl_user` (
   `date_created` datetime DEFAULT NULL,
   `date_updated` datetime DEFAULT NULL,
   `status` varchar(20) DEFAULT NULL,
+  `firstname` varchar(150) DEFAULT NULL,
+  `lastname` varchar(150) DEFAULT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=22 DEFAULT CHARSET=latin1;
+) ENGINE=InnoDB AUTO_INCREMENT=29 DEFAULT CHARSET=latin1;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -132,7 +134,7 @@ CREATE TABLE `tbl_user` (
 
 LOCK TABLES `tbl_user` WRITE;
 /*!40000 ALTER TABLE `tbl_user` DISABLE KEYS */;
-INSERT INTO `tbl_user` VALUES (20,'20160000001','ned','a0633f217ab7dc060292ec5c78a4474469999876e1d84ef2f306bdd8','flanders','2016-05-08 20:35:25','2016-05-08 21:38:54','active'),(21,'20160000002','ted','2da45dedabbdb5faa68039acdb644dbfe2dbb4773315fba0556a2b13','flanders.com','2016-05-08 20:51:43','2016-05-08 20:51:43','active');
+INSERT INTO `tbl_user` VALUES (23,'20160000001','ned','NF-yxFHgh97JgIC59nuOMaW7-ip-jNKU','flanders.com','2016-05-09 15:14:48','2016-05-09 15:14:48','active','Nedward','Flanders'),(28,'20160000002','rsbulanon','q6D6uBeIVH0j8rDQdSghcBqmdg==','Jollibee','2016-05-09 15:59:03','2016-05-09 15:59:03','active','Russel','Bulanon');
 /*!40000 ALTER TABLE `tbl_user` ENABLE KEYS */;
 UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
@@ -145,4 +147,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2016-05-09  9:46:51
+-- Dump completed on 2016-05-09 16:00:19

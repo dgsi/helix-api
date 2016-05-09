@@ -13,4 +13,6 @@ type User struct {
 	DateCreated time.Time `json:"date_created"`
 	DateUpdated time.Time `json:"date_updated"`
 	Status string `json:"status"`
+	Firstname string `json:"firstname"`
+	Lastname string `json:"lastname"`
 }

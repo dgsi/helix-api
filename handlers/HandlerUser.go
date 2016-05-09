@@ -44,6 +44,8 @@ func (handler UserHandler) Index(c *gin.Context) {
 func (handler UserHandler) Create(c *gin.Context) {
 	now := time.Now().UTC()
 	username := c.PostForm("username")
+	firstname := c.PostForm("firstname")
+	lastname := c.PostForm("lastname")
 	password := c.PostForm("password")
 	companyid := c.PostForm("company_id")
 
@@ -51,6 +53,10 @@ func (handler UserHandler) Create(c *gin.Context) {
 		respond(http.StatusBadRequest,"Please supply the user's username",c,true)
 	} else if (strings.TrimSpace(password) == "") {
 		respond(http.StatusBadRequest,"Please supply the user's password",c,true)
+	} else if (strings.TrimSpace(firstname) == "") {
+		respond(http.StatusBadRequest,"Please supply the user's first name",c,true)
+	} else if (strings.TrimSpace(lastname) == "") {
+		respond(http.StatusBadRequest,"Please supply the user's last name",c,true)
 	} else if (strings.TrimSpace(companyid) == "") {
 		respond(http.StatusBadRequest,"Please supply the user's company id",c,true)
 	} else {
@@ -79,7 +85,7 @@ func (handler UserHandler) Create(c *gin.Context) {
 
 		    encryptedPassword := encrypt([]byte(config.GetString("CRYPT_KEY")), password)
 
-			result := handler.db.Exec("INSERT INTO tbl_user VALUES(null,?,?,?,?,?,?,?)",clientid,username,encryptedPassword,companyid,now,now,"active")
+			result := handler.db.Exec("INSERT INTO tbl_user VALUES(null,?,?,?,?,?,?,?,?,?)",clientid,username,encryptedPassword,companyid,now,now,"active",firstname,lastname)
 
 			if (result.RowsAffected == 1) {
 				c.JSON(http.StatusCreated, generateJWT(clientid))
@@ -118,6 +124,8 @@ func (handler UserHandler) Auth(c *gin.Context) {
 					authenticatedUser.Id = user.Id
 					authenticatedUser.Clientid = user.Clientid
 					authenticatedUser.Username = user.Username
+					authenticatedUser.Firstname = user.Firstname
+					authenticatedUser.Lastname = user.Lastname
 					authenticatedUser.Companyid = user.Companyid
 					authenticatedUser.Token = generateJWT(user.Clientid).Token
 					c.JSON(http.StatusOK, authenticatedUser)
