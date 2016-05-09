@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 	"io"
-	"errors"
 	"strconv"
 	"crypto/aes"
     "crypto/cipher"
@@ -78,10 +77,8 @@ func (handler UserHandler) Create(c *gin.Context) {
 				clientid = strconv.Itoa(year + 1)
 			}
 
-		    toEncrypt := []byte(password)
-		    ciphertext,_ := encrypt([]byte(config.GetString("CRYPT_KEY")), toEncrypt)
+		    encryptedPassword := encrypt([]byte(config.GetString("CRYPT_KEY")), password)
 
-		    encryptedPassword := fmt.Sprintf("%0x", ciphertext)
 			result := handler.db.Exec("INSERT INTO tbl_user VALUES(null,?,?,?,?,?,?,?)",clientid,username,encryptedPassword,companyid,now,now,"active")
 
 			if (result.RowsAffected == 1) {
@@ -111,11 +108,9 @@ func (handler UserHandler) Auth(c *gin.Context) {
 			if user.Clientid == "" {
 				respond(http.StatusBadRequest,"Account not found!",c,true)
 			} else {
-		    	toEncrypt := []byte(password)
-		    	ciphertext,_ := encrypt([]byte(config.GetString("CRYPT_KEY")), toEncrypt)
-				result, _ := decrypt([]byte(config.GetString("CRYPT_KEY")), ciphertext)
+				decryptedPassword := decrypt([]byte(config.GetString("CRYPT_KEY")), user.Password)
 				//invalid password
-				if fmt.Sprintf("%s",result) != password {
+				if decryptedPassword != password {
 					respond(http.StatusBadRequest,"Account not found!",c,true)
 				} else {
 					//authentication successful
@@ -126,7 +121,7 @@ func (handler UserHandler) Auth(c *gin.Context) {
 					authenticatedUser.Companyid = user.Companyid
 					authenticatedUser.Token = generateJWT(user.Clientid).Token
 					c.JSON(http.StatusOK, authenticatedUser)
-				}
+				}					
 			}
 		}
 	} else {
@@ -210,39 +205,54 @@ func generateJWT(clientid string) m.JWT {
     return user
 }
 
-func encrypt(key, text []byte) ([]byte, error) {
-    block, err := aes.NewCipher(key)
-    if err != nil {
-        return nil, err
-    }
-    b := base64.StdEncoding.EncodeToString(text)
-    ciphertext := make([]byte, aes.BlockSize+len(b))
-    iv := ciphertext[:aes.BlockSize]
-    if _, err := io.ReadFull(rand.Reader, iv); err != nil {
-        return nil, err
-    }
-    cfb := cipher.NewCFBEncrypter(block, iv)
-    cfb.XORKeyStream(ciphertext[aes.BlockSize:], []byte(b))
-    return ciphertext, nil
+// encrypt string to base64 crypto using AES
+func encrypt(key []byte, text string) string {
+	// key := []byte(keyText)
+	plaintext := []byte(text)
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		panic(err)
+	}
+
+	// The IV needs to be unique, but not secure. Therefore it's common to
+	// include it at the beginning of the ciphertext.
+	ciphertext := make([]byte, aes.BlockSize+len(plaintext))
+	iv := ciphertext[:aes.BlockSize]
+	if _, err := io.ReadFull(rand.Reader, iv); err != nil {
+		panic(err)
+	}
+
+	stream := cipher.NewCFBEncrypter(block, iv)
+	stream.XORKeyStream(ciphertext[aes.BlockSize:], plaintext)
+
+	// convert to base64
+	return base64.URLEncoding.EncodeToString(ciphertext)
 }
 
-func decrypt(key, text []byte) ([]byte, error) {
-    block, err := aes.NewCipher(key)
-    if err != nil {
-        return nil, err
-    }
-    if len(text) < aes.BlockSize {
-        return nil, errors.New("ciphertext too short")
-    }
-    iv := text[:aes.BlockSize]
-    text = text[aes.BlockSize:]
-    cfb := cipher.NewCFBDecrypter(block, iv)
-    cfb.XORKeyStream(text, text)
-    data, err := base64.StdEncoding.DecodeString(string(text))
-    if err != nil {
-        return nil, err
-    }
-    return data, nil
+// decrypt from base64 to decrypted string
+func decrypt(key []byte, cryptoText string) string {
+	ciphertext, _ := base64.URLEncoding.DecodeString(cryptoText)
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		panic(err)
+	}
+
+	// The IV needs to be unique, but not secure. Therefore it's common to
+	// include it at the beginning of the ciphertext.
+	if len(ciphertext) < aes.BlockSize {
+		panic("ciphertext too short")
+	}
+	iv := ciphertext[:aes.BlockSize]
+	ciphertext = ciphertext[aes.BlockSize:]
+
+	stream := cipher.NewCFBDecrypter(block, iv)
+
+	// XORKeyStream can work in-place if the two arguments are the same.
+	stream.XORKeyStream(ciphertext, ciphertext)
+
+	return fmt.Sprintf("%s", ciphertext)
 }
 
 func AddTokenToRedis(c *gin.Context) {
