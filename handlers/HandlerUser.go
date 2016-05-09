@@ -18,7 +18,7 @@ import (
 	jwt_lib "github.com/dgrijalva/jwt-go"
 	m "helix/dgsi/api/models"
 	"helix/dgsi/api/config"
-	"github.com/garyburd/redigo/redis"
+	"gopkg.in/redis.v3"
 )
 
 type UserHandler struct {
@@ -31,11 +31,14 @@ func NewUserHandler(db *gorm.DB) *UserHandler {
 
 //get all users
 func (handler UserHandler) Index(c *gin.Context) {
-	ValidateToken(c)
-	users := []m.User{}	
-	handler.db.Table("tbl_user").Order("id desc").Find(&users)
-	fmt.Println("HEADER ---> " + c.Request.Header.Get("Authorization"))
-	c.JSON(http.StatusOK, &users)
+	if IsTokenValid(c) {
+		users := []m.User{}	
+		handler.db.Table("tbl_user").Order("id desc").Find(&users)
+		fmt.Println("HEADER ---> " + c.Request.Header.Get("Authorization"))
+		c.JSON(http.StatusOK, &users)
+	} else {
+		respond(http.StatusBadRequest,"Sorry, but your session has expired!",c,true)	
+	}
 }
 
 //create new user
@@ -92,81 +95,105 @@ func (handler UserHandler) Create(c *gin.Context) {
 
 //user authentication
 func (handler UserHandler) Auth(c *gin.Context) {
-	username := c.PostForm("username")
-	password := c.PostForm("password")
+	if IsTokenValid(c) {
+		username := c.PostForm("username")
+		password := c.PostForm("password")
 
-	if (strings.TrimSpace(username) == "") {
-		respond(http.StatusBadRequest,"Please supply the user's username",c,true)
-	} else if (strings.TrimSpace(password) == "") {
-		respond(http.StatusBadRequest,"Please supply the user's password",c,true)
-	} else {
-		//check if username already existing
-		user := m.User{}	
-		handler.db.Table("tbl_user").Where("username = ?",username).Find(&user)
-
-		if user.Clientid == "" {
-			respond(http.StatusBadRequest,"Account not found!",c,true)
+		if (strings.TrimSpace(username) == "") {
+			respond(http.StatusBadRequest,"Please supply the user's username",c,true)
+		} else if (strings.TrimSpace(password) == "") {
+			respond(http.StatusBadRequest,"Please supply the user's password",c,true)
 		} else {
-	    	toEncrypt := []byte(password)
-	    	ciphertext,_ := encrypt([]byte(config.GetString("CRYPT_KEY")), toEncrypt)
-			result, _ := decrypt([]byte(config.GetString("CRYPT_KEY")), ciphertext)
-			//invalid password
-			if fmt.Sprintf("%s",result) != password {
+			//check if username already existing
+			user := m.User{}	
+			handler.db.Table("tbl_user").Where("username = ?",username).Find(&user)
+
+			if user.Clientid == "" {
 				respond(http.StatusBadRequest,"Account not found!",c,true)
 			} else {
-				//authentication successful
-				authenticatedUser := m.AuthenticatedUser{}
-				authenticatedUser.Id = user.Id
-				authenticatedUser.Clientid = user.Clientid
-				authenticatedUser.Username = user.Username
-				authenticatedUser.Companyid = user.Companyid
-				authenticatedUser.Token = generateJWT(user.Clientid).Token
-				c.JSON(http.StatusOK, authenticatedUser)
+		    	toEncrypt := []byte(password)
+		    	ciphertext,_ := encrypt([]byte(config.GetString("CRYPT_KEY")), toEncrypt)
+				result, _ := decrypt([]byte(config.GetString("CRYPT_KEY")), ciphertext)
+				//invalid password
+				if fmt.Sprintf("%s",result) != password {
+					respond(http.StatusBadRequest,"Account not found!",c,true)
+				} else {
+					//authentication successful
+					authenticatedUser := m.AuthenticatedUser{}
+					authenticatedUser.Id = user.Id
+					authenticatedUser.Clientid = user.Clientid
+					authenticatedUser.Username = user.Username
+					authenticatedUser.Companyid = user.Companyid
+					authenticatedUser.Token = generateJWT(user.Clientid).Token
+					c.JSON(http.StatusOK, authenticatedUser)
+				}
 			}
 		}
+	} else {
+		respond(http.StatusBadRequest,"Sorry, but your session has expired!",c,true)	
 	}
 }
 
 //update user
 func (handler UserHandler) Update(c *gin.Context) {
-	client_id := c.Param("client_id")
-	username := c.PostForm("username")
-	companyid := c.PostForm("company_id")
+	if IsTokenValid(c) {
+		client_id := c.Param("client_id")
+		username := c.PostForm("username")
+		companyid := c.PostForm("company_id")
 
-	if (strings.TrimSpace(username) == "") {
-		respond(http.StatusBadRequest,"Please supply the user's username",c,true)
-	} else if (strings.TrimSpace(companyid) == "") {
-		respond(http.StatusBadRequest,"Please supply the user's company id",c,true)
-	} else {
-		//check if user is existing based on the passed client id
-		currentUser := m.User{}	
-		handler.db.Table("tbl_user").Where("clientid = ?",client_id).Find(&currentUser)
-
-		if (currentUser.Clientid == "") {
-			respond(http.StatusBadRequest,"User record not found",c,true)
+		if (strings.TrimSpace(username) == "") {
+			respond(http.StatusBadRequest,"Please supply the user's username",c,true)
+		} else if (strings.TrimSpace(companyid) == "") {
+			respond(http.StatusBadRequest,"Please supply the user's company id",c,true)
 		} else {
-			//check if username already existing
-			otherUser := m.User{}	
-			handler.db.Table("tbl_user").Where("clientid != ? AND username = ?",client_id, username).Find(&otherUser)
+			//check if user is existing based on the passed client id
+			currentUser := m.User{}	
+			handler.db.Table("tbl_user").Where("clientid = ?",client_id).Find(&currentUser)
 
-			if (otherUser.Clientid != "") {
-				respond(http.StatusBadRequest,"Username already taken",c,true)
+			if (currentUser.Clientid == "") {
+				respond(http.StatusBadRequest,"User record not found",c,true)
 			} else {
-				if currentUser.Username == username && currentUser.Companyid == companyid {
-					respond(http.StatusBadRequest,"No changes detected",c,true)
+				//check if username already existing
+				otherUser := m.User{}	
+				handler.db.Table("tbl_user").Where("clientid != ? AND username = ?",client_id, username).Find(&otherUser)
+
+				if (otherUser.Clientid != "") {
+					respond(http.StatusBadRequest,"Username already taken",c,true)
 				} else {
-					now := time.Now().UTC()
-					result := handler.db.Exec("UPDATE tbl_user SET username = ?, companyid = ?, date_updated = ? WHERE clientid = ?",username,companyid,now,client_id)
-					if (result.RowsAffected == 1) {
-						updatedUser := m.User{}
-						handler.db.Table("tbl_user").Where("clientid = ?",client_id).Find(&updatedUser)
-						c.JSON(http.StatusOK, updatedUser)
+					if currentUser.Username == username && currentUser.Companyid == companyid {
+						respond(http.StatusBadRequest,"No changes detected",c,true)
 					} else {
-						respond(http.StatusBadRequest,"Failed to update user record",c,true)
+						now := time.Now().UTC()
+						result := handler.db.Exec("UPDATE tbl_user SET username = ?, companyid = ?, date_updated = ? WHERE clientid = ?",username,companyid,now,client_id)
+						if (result.RowsAffected == 1) {
+							updatedUser := m.User{}
+							handler.db.Table("tbl_user").Where("clientid = ?",client_id).Find(&updatedUser)
+							c.JSON(http.StatusOK, updatedUser)
+						} else {
+							respond(http.StatusBadRequest,"Failed to update user record",c,true)
+						}
 					}
 				}
 			}
 		}
+	} else {
+		respond(http.StatusBadRequest,"Sorry, but your session has expired!",c,true)
+	}
+}
+
+//logout
+func (userHandler UserHandler) Logout(c *gin.Context) {
+	if IsTokenValid(c) {
+		username := c.PostForm("username")
+		if (strings.TrimSpace(username) == "") {
+			respond(http.StatusBadRequest,"Please supply the user's username",c,true)
+		} else {
+			//add token to blacklist
+			AddTokenToRedis(c)
+			respond(http.StatusOK,"Successfully logged out from the system",c,false)
+		}		
+	} else {
+		respond(http.StatusBadRequest,"Sorry, but your session has expired!",c,true)
 	}
 }
 
@@ -180,8 +207,6 @@ func generateJWT(clientid string) m.JWT {
 	tokenString, _ := token.SignedString([]byte(config.GetString("TOKEN_KEY")))
 	user := m.JWT{}
 	user.Token = tokenString
-	//add token to redis
-	AddTokenToRedis(tokenString)
     return user
 }
 
@@ -220,23 +245,39 @@ func decrypt(key, text []byte) ([]byte, error) {
     return data, nil
 }
 
-func AddTokenToRedis(token string) {
-    c, err := redis.Dial("tcp", ":6379")
-	if err != nil {
-		fmt.Println("CONNECTED")
-	} else {
-		fmt.Println("NO CONNECTION")
-	}
-
-	c.Do("SET","hello",token)
-	
-	result, err := redis.String(c.Do("GET", "hello"))
-	fmt.Printf("2 ------------> ",result)
-	defer c.Close()
+func AddTokenToRedis(c *gin.Context) {
+    client := redis.NewClient(&redis.Options{
+        Addr:     ":6379",
+        Password: "", // no password set
+        DB:       0,  // use default DB
+    })
+    token := c.Request.Header.Get("Authorization")
+    err := client.Set(token, token, time.Duration(86400)*time.Second).Err()
+    if err != nil {
+        panic(err)
+    } else {
+    	fmt.Println("Successfully written in redis")
+    	result, err := client.Get(token).Result()
+    	if (err == nil) {
+    		fmt.Println("RESULT ---> " + result)
+    	}
+    }
+    defer client.Close()
 }
 
-func ValidateToken(c *gin.Context) {
-    
+func IsTokenValid(c *gin.Context) bool {
+    client := redis.NewClient(&redis.Options{
+        Addr:     ":6379",
+        Password: "", // no password set
+        DB:       0,  // use default DB
+    })
+    defer client.Close()
+    token := c.Request.Header.Get("Authorization")
+    result, _ := client.Get(token).Result()
+	if (result != "") {
+		return false
+	}
+	return true
 }
 
 

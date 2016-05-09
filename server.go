@@ -29,7 +29,8 @@ func LoadAPIRoutes(r *gin.Engine, db *gorm.DB) {
 	private.GET("/users", userHandler.Index)
 	private.PUT("/users/:client_id", userHandler.Update)
 	public.POST("/users", userHandler.Create)
-	public.POST("/users/auth", userHandler.Auth)
+	public.POST("/login", userHandler.Auth)
+	private.POST("/logout", userHandler.Logout)
 
 	var port = os.Getenv("PORT")
 	if port == "" {
